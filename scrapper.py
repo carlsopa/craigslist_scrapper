@@ -7,7 +7,7 @@ import csv
 from fuzzywuzzy import fuzz as fw
 import re
 
-print('hello world')
+print('Craigs list appartment scrapper')
 #get the initial page for the listings, to get the total count
 
 neighborhood = []
@@ -16,6 +16,7 @@ sqft = []
 price = []
 link = []
 title = []
+post_id = []
 #count = 0
 def Analyze(data_frame):
     neighborhood_unique_list = []
@@ -33,6 +34,14 @@ def Analyze(data_frame):
         neighborhood_mean_list.append(mean_price)
     pd.DataFrame({'neighborhood':neighborhood_unique_list,'max price':neighborhood_max_list,'min price':neighborhood_min_list,'average price':neighborhood_mean_list}).to_csv('neighborhood_analyze.csv',index=False)
 
+def FuzzyComparision(data_frame):
+    for i in range(len(data_frame)):
+    	for j in range(i + 1, len(data_frame)):
+    		ratio = fw.partial_ratio(data_frame['neighborhood'][i].lower(),data_frame['neighborhood'][j].lower())
+    		if ratio>90:
+    			data_frame['neighborhood'][j] = data_frame['neighborhood'][i]
+    data_frame['neighborhood'].to_csv('neighborhood_clean_a.csv',index=False)
+
 def Serialize(data_frame):
     
     data_frame['footage'] = data_frame['footage'].replace(0,np.nan)
@@ -41,12 +50,7 @@ def Serialize(data_frame):
     data_frame['neighborhood'] = data_frame['neighborhood'].str.lower()
     pd.set_option('display.width',None)
 
-    for i in range(len(data_frame)):
-    	for j in range(i + 1, len(data_frame)):
-    		ratio = fw.partial_ratio(data_frame['neighborhood'][i].lower(),data_frame['neighborhood'][j].lower())
-    		if ratio>90:
-    			data_frame['neighborhood'][j] = data_frame['neighborhood'][i]
-    data_frame['neighborhood'].to_csv('neighborhood_clean_a.csv',index=False)
+    FuzzyComparision(data_frame)
 
     print(len(data_frame))
     data_frame = data_frame.drop_duplicates('title')
@@ -78,6 +82,18 @@ def bedroom(post):
         bedroom_count.append(post_bedroom)
         sqft.append(post_footage)
 
+def neighborhood_data(post):
+    post_url = post.find(class_='result-title hdrlnk')
+    post_link = post_url['href']
+    link.append(post_link)
+    post_id.append(str(post_url['data-id']))
+    title.append(post_url.text)
+    post_neighborhood = post.find(class_='result-hood').text
+    post_price = int(post.find(class_='result-price').text.strip().replace('$',''))
+    neighborhood.append(post_neighborhood)
+    price.append(post_price)
+
+
 def initData(url):
     response = get(url)
     html_result = BeautifulSoup(response.text, 'html.parser')
@@ -87,8 +103,8 @@ def initData(url):
     return(pages)
 
 def scrapData(pages,url):
-    count = 0
     for page in pages:
+        print('scrapping results: '+str(page)+' of '+str(pages[-1]))
         response = get(url+str(page))
 
         html_result = BeautifulSoup(response.text, 'html.parser')
@@ -96,27 +112,20 @@ def scrapData(pages,url):
         posts = html_result.find_all(class_='result-row')
         for post in posts:
             if post.find(class_='result-hood') is not None:
-                post_url = post.find(class_='result-title hdrlnk')
-                post_link = post_url['href']
-                link.append(post_link)
-                title.append(post_url.text)
-                post_neighborhood = post.find(class_='result-hood').text
-                post_price = int(post.find(class_='result-price').text.strip().replace('$',''))
-                neighborhood.append(post_neighborhood)
-                price.append(post_price)
+                neighborhood_data(post)
                 bedroom(post)
-                
-            count+=1
-    return(pd.DataFrame({
+
+    
+#script to actual scrap craigs list
+scrapData(initData('https://washingtondc.craigslist.org/search/apa'),'https://washingtondc.craigslist.org/search/apa?s=')
+data_frame = pd.DataFrame({
+    'id':post_id,
     'title':title,
     'neighborhood':neighborhood,
     'footage':sqft,
     'bedroom':bedroom_count,
     'price':price,
-    'link':link}))
-       
-
-data_frame = scrapData(initData('https://washingtondc.craigslist.org/search/apa'),'https://washingtondc.craigslist.org/search/apa?s=')
+    'link':link})
 
 Serialize(data_frame)
 Analyze(data_frame)
