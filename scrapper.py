@@ -17,7 +17,15 @@ price = []
 link = []
 title = []
 post_id = []
-#count = 0
+
+washer_dryer =[]
+washer_dryer_title = []
+washer_dryer_id = []
+washer_footage = []
+washer_bedroom = []
+washer_price = []
+washer_neighborhood = []
+
 def Analyze(data_frame):
     neighborhood_unique_list = []
     neighborhood_max_list = []
@@ -42,7 +50,7 @@ def FuzzyComparision(data_frame):
     			data_frame['neighborhood'][j] = data_frame['neighborhood'][i]
     data_frame['neighborhood'].to_csv('neighborhood_clean_a.csv',index=False)
 
-def Serialize(data_frame):
+def Serialize(data_frame,file):
     
     data_frame['footage'] = data_frame['footage'].replace(0,np.nan)
     data_frame['bedroom'] = data_frame['bedroom'].replace(0,np.nan)
@@ -52,35 +60,37 @@ def Serialize(data_frame):
 
     FuzzyComparision(data_frame)
 
-    print(len(data_frame))
     data_frame = data_frame.drop_duplicates('title')
     data_frame = data_frame.drop_duplicates(['footage','bedroom','price'])
     print(len(data_frame))
     data_frame = data_frame.dropna(subset=['footage','bedroom'],how='all')
-    data_frame.to_csv("rent_clean.csv",index=False)
+    data_frame.to_csv(file+".csv",index=False)
 
 def bedroom(post):
+    a_bedroom_count = []
+    a_sqft = []
     if post.find(class_='housing') is not None:
         if 'ft2' in post.find(class_='housing').text.split()[0]:
             post_bedroom = np.nan
             post_footage = post.find(class_='housing').text.split()[0][:-3]
-            bedroom_count.append(post_bedroom)
-            sqft.append(post_footage)
+            a_bedroom_count.append(post_bedroom)
+            a_sqft.append(post_footage)
         elif len(post.find(class_='housing').text.split())>2:
             post_bedroom = post.find(class_='housing').text.replace("br","").split()[0]
             post_footage = post.find(class_='housing').text.split()[2][:-3]
-            bedroom_count.append(post_bedroom)
-            sqft.append(post_footage)
+            a_bedroom_count.append(post_bedroom)
+            a_sqft.append(post_footage)
         elif len(post.find(class_='housing').text.split())==2:
             post_bedroom = post.find(class_='housing').text.replace("br","").split()[0]
             post_footage = np.nan
-            bedroom_count.append(post_bedroom)
-            sqft.append(post_footage)
+            a_bedroom_count.append(post_bedroom)
+            a_sqft.append(post_footage)       
     else:
         post_bedroom = np.nan
         post_footage = np.nan
-        bedroom_count.append(post_bedroom)
-        sqft.append(post_footage)
+        a_bedroom_count.append(post_bedroom)
+        a_sqft.append(post_footage)
+    return(post_bedroom,post_footage)
 
 def neighborhood_data(post):
     post_url = post.find(class_='result-title hdrlnk')
@@ -90,8 +100,8 @@ def neighborhood_data(post):
     title.append(post_url.text)
     post_neighborhood = post.find(class_='result-hood').text
     post_price = int(post.find(class_='result-price').text.strip().replace('$',''))
-    neighborhood.append(post_neighborhood)
-    price.append(post_price)
+    return(post_neighborhood,post_price)
+
 
 
 def initData(url):
@@ -102,22 +112,61 @@ def initData(url):
     pages = np.arange(0,total+1,120)
     return(pages)
 
-def scrapData(pages,url):
-    for page in pages:
-        print('scrapping results: '+str(page)+' of '+str(pages[-1]))
-        response = get(url+str(page))
+def Posts(page,pages,url):
+    print('scrapping results: '+str(page)+' of '+str(pages[-1]))
+    response = get(url+str(page))
 
-        html_result = BeautifulSoup(response.text, 'html.parser')
+    html_result = BeautifulSoup(response.text, 'html.parser')
 
-        posts = html_result.find_all(class_='result-row')
-        for post in posts:
-            if post.find(class_='result-hood') is not None:
-                neighborhood_data(post)
-                bedroom(post)
+    return(html_result.find_all(class_='result-row'))
+def WasherDryer(post):
+    post_url = post.find(class_='result-title hdrlnk')
+    washer_dryer_id.append(str(post_url['data-id']))
+    washer_dryer.append(True)
+    washer_dryer_title.append(post_url.text)
+    post_price = int(post.find(class_='result-price').text.strip().replace('$',''))
+    #washer_price.append(post_price)
+    post_neighborhood = post.find(class_='result-hood').text
+    #washer_neighborhood.append(post_neighborhood)
 
     
+    
+
+def scrapData(pages,url,type):
+    
+    for page in pages:
+        
+        # print('scrapping results: '+str(page)+' of '+str(pages[-1]))
+        # response = get(url+str(page))
+
+        # html_result = BeautifulSoup(response.text, 'html.parser')
+
+        # posts = html_result.find_all(class_='result-row')
+        for post in Posts(page,pages,url):
+            if type == 'Washer_Dryer':
+                if post.find(class_='result-hood') is not None:
+                    WasherDryer(post)
+                    n_result = neighborhood_data(post)
+                    b_result = bedroom(post)
+                    washer_neighborhood.append(n_result[0])
+                    washer_price.append(n_result[1])
+                    washer_bedroom.append(b_result[0])
+                    washer_footage.append(b_result[1])
+            elif type == 'Bed':
+                if post.find(class_='result-hood') is not None:
+                    n_result = neighborhood_data(post)
+                    b_result = bedroom(post)
+                    neighborhood.append(n_result[0])
+                    price.append(n_result[1])
+                    bedroom_count.append(b_result[0])
+                    sqft.append(b_result[1])
+
+
 #script to actual scrap craigs list
-scrapData(initData('https://washingtondc.craigslist.org/search/apa'),'https://washingtondc.craigslist.org/search/apa?s=')
+scrapData(initData('https://washingtondc.craigslist.org/search/apa'),'https://washingtondc.craigslist.org/search/apa?s=','Bed')
+
+# scrapData(initData('https://washingtondc.craigslist.org/search/apa?laundry=1&sale_date=all+dates'),'https://washingtondc.craigslist.org/search/apa?laundry=1&s=','Washer_Dryer')
+
 data_frame = pd.DataFrame({
     'id':post_id,
     'title':title,
@@ -126,7 +175,23 @@ data_frame = pd.DataFrame({
     'bedroom':bedroom_count,
     'price':price,
     'link':link})
+Serialize(data_frame,'rent_clean')
+# Analyze(data_frame)
+#print(washer_dryer_id)
 
-Serialize(data_frame)
-Analyze(data_frame)
+scrapData(initData('https://washingtondc.craigslist.org/search/apa?laundry=1&sale_date=all+dates'),'https://washingtondc.craigslist.org/search/apa?laundry=1&s=','Washer_Dryer')
+
+washer_dryer_data_frame = pd.DataFrame({
+    'id':washer_dryer_id,
+    'title':washer_dryer_title,
+    'neighborhood':washer_neighborhood,
+    'footage':washer_footage,
+    'bedroom':washer_bedroom,
+    'price':washer_price,
+    'included':washer_dryer})
+Serialize(washer_dryer_data_frame,'washer_dryer')
+
+#print(washer_dryer_id)
+
+
 
